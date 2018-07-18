@@ -122,6 +122,11 @@ public class WeChatManager {
      */
     private Map<String, Object> loginInfo = new HashMap<String, Object>();
 
+
+    public void putLoginInfo(String key, Object object) {
+        this.loginInfo.put(key, object);
+    }
+
     public HttpClientUtil getHttpClientUtil() {
         return httpClientUtil;
     }

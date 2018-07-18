@@ -135,7 +135,7 @@ public class HttpClientUtil {
             int statusCode = response.getStatusLine().getStatusCode();
             if (statusCode != 200) {
                 httpGet.abort();
-                log.error("http请求{}失败, error status code : {}", url, statusCode);
+                log.warn("status code : {}", url, statusCode);
             }
             //读取响应结果
             HttpEntity entity = response.getEntity();

@@ -13,17 +13,15 @@ import org.apache.http.util.EntityUtils;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
+import org.w3c.dom.Document;
+import org.xml.sax.InputSource;
 
 import javax.imageio.ImageIO;
+import javax.xml.parsers.DocumentBuilder;
+import javax.xml.parsers.DocumentBuilderFactory;
 import java.awt.image.BufferedImage;
-import java.io.File;
-import java.io.FileOutputStream;
-import java.io.IOException;
-import java.io.OutputStream;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.io.*;
+import java.util.*;
 
 /**
  * @author: Mr Tom
@@ -70,11 +68,11 @@ public class LoginServiceImpl implements LoginService {
             Map<String, String> resultMap = processResult(result);
             String code = resultMap.get("window.code");
             if ("200".equals(code)) {
-                String uri = resultMap.get("window.redirect_uri");
+                String redirectUrl = resultMap.get("window.redirect_uri");
                 //https://wx2.qq.com/cgi-bin/mmwebwx-bin 或https://wx.qq.com/cgi-bin/mmwebwx-bin
-                String url = uri.substring(0, uri.lastIndexOf('/'));
+                String url = redirectUrl.substring(0, redirectUrl.lastIndexOf('/'));
                 //放到weChatManager中
-                weChatManager.getLoginInfo().put("url", url);
+                weChatManager.putLoginInfo("url", url);
                 Map<String, List<String>> possibleUrlMap = this.getPossibleUrlMap();
                 boolean isFind = false;
                 for (Map.Entry<String, List<String>> entry : possibleUrlMap.entrySet()) {
@@ -84,18 +82,33 @@ public class LoginServiceImpl implements LoginService {
                         //设置
                         String fileUrl = "https://" + entry.getValue().get(0) + "/cgi-bin/mmwebwx-bin";
                         String syncUrl = "https://" + entry.getValue().get(1) + "/cgi-bin/mmwebwx-bin";
-                        weChatManager.getLoginInfo().put("fileUrl", fileUrl);
-                        weChatManager.getLoginInfo().put("syncUrl", syncUrl);
+                        weChatManager.putLoginInfo("fileUrl", fileUrl);
+                        weChatManager.putLoginInfo("syncUrl", syncUrl);
                         isFind = true;
                         break;
                     }
                 }
                 if (!isFind) {
-                    weChatManager.getLoginInfo().put("fileUrl", url);
-                    weChatManager.getLoginInfo().put("syncUrl", url);
+                    weChatManager.putLoginInfo("fileUrl", url);
+                    weChatManager.putLoginInfo("syncUrl", url);
                 }
-
-
+                String deviceid = "e" + String.valueOf(new Random().nextLong()).substring(1, 16);
+                weChatManager.putLoginInfo("deviceid", deviceid);
+                List<String> list = new ArrayList<>();
+                weChatManager.putLoginInfo("BaseRequest", list);
+                //完成设置信息后，请求登录
+                String text = httpClientUtil.doGet(redirectUrl, null, null, false);
+                Document doc = xmlParser(text);
+                if (doc != null) {
+                    String skey = "skey";
+                    String wxsid = "wxsid";
+                    String wxuin = "wxuin";
+                    String pass_ticket = "pass_ticket";
+                    weChatManager.putLoginInfo(skey, doc.getElementsByTagName(skey).item(0).getFirstChild().getNodeValue());
+                    weChatManager.putLoginInfo(wxsid, doc.getElementsByTagName(wxsid).item(0).getFirstChild().getNodeValue());
+                    weChatManager.putLoginInfo(wxuin, doc.getElementsByTagName(wxuin).item(0).getFirstChild().getNodeValue());
+                    weChatManager.putLoginInfo(pass_ticket, doc.getElementsByTagName(pass_ticket).item(0).getFirstChild().getNodeValue());
+                }
                 isLogin = true;
                 log.info("登录成功!");
             } else if ("201".equals(code)) {
@@ -107,15 +120,39 @@ public class LoginServiceImpl implements LoginService {
         return isLogin;
     }
 
+    private Document xmlParser(String text) {
+        Document doc = null;
+        StringReader sr = new StringReader(text);
+        InputSource is = new InputSource(sr);
+        DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
+        try {
+            DocumentBuilder builder = factory.newDocumentBuilder();
+            doc = builder.parse(is);
+        } catch (Exception e) {
+            log.error("can not parse msg:{}", e.getMessage());
+        }
+        return doc;
+    }
+
+    /**
+     * 将返回值转化为map
+     * @param result
+     * @return
+     */
     private Map<String, String> processResult(String result) {
         Map<String, String> resultMap = new HashMap<>();
-        String[] split = result.split(";");
-        if (split != null && split.length > 0) {
+        String[] split = result.replace("jpg;", "jpg#").split(";");
+        if (split.length > 0) {
             for (int i = 0; i < split.length; i++) {
                 String[] str = split[i].split("=");
                 String key = str[0].trim();
-                String value = str[1].trim().replace("\"", "").replace("'", "");
-                resultMap.put(key, value);
+                String value = str[1];
+                if (str.length > 2) {
+                    for (int j = 2; j < str.length; j++) {
+                        value = value + "=" + str[j];
+                    }
+                }
+                resultMap.put(key, value.trim().replace("\"", "").replace("'", ""));
             }
         }
         return resultMap;
