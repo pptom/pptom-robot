@@ -16,19 +16,6 @@ public interface LoginService {
     boolean login();
 
     /**
-     * 获取UUID
-     * @return
-     */
-    String getUuid();
-
-    /**
-     * 获取二维码图片
-     * @param qrPath
-     * @return
-     */
-    boolean getQR(String qrPath);
-
-    /**
      * web初始化
      * @return
      */

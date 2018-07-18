@@ -1,9 +1,7 @@
 package com.pptom.robot.util;
 
 import lombok.extern.slf4j.Slf4j;
-import org.apache.http.Consts;
 import org.apache.http.HttpEntity;
-import org.apache.http.client.ClientProtocolException;
 import org.apache.http.client.CookieStore;
 import org.apache.http.client.config.RequestConfig;
 import org.apache.http.client.entity.UrlEncodedFormEntity;
@@ -17,169 +15,189 @@ import org.apache.http.impl.client.CloseableHttpClient;
 import org.apache.http.impl.client.HttpClients;
 import org.apache.http.message.BasicNameValuePair;
 import org.apache.http.util.EntityUtils;
+import org.springframework.util.StringUtils;
 
-import java.io.IOException;
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Map.Entry;
-import java.util.Set;
-import java.util.logging.Logger;
 
 /**
- * HTTP访问类，对Apache HttpClient进行简单封装，适配器模式
- * 
- * @author https://github.com/yaphone
- * @date 创建时间：2017年4月9日 下午7:05:04
- * @version 1.0
- *
+ * @author tom.tang
+ * @date 2018/7/18
+ * @email tom.tang@sainstore.com
+ * @description
+ * @since 2018/7/18
  */
 @Slf4j
 public class HttpClientUtil {
-    
-    public static final String USER_AGENT = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_11_6) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/54.0.2840.71 Safari/537.36";
 
-	private static CloseableHttpClient httpClient;
+    private static CloseableHttpClient httpClient;
 
-	private static HttpClientUtil instance = null;
+    private static HttpClientUtil instance = null;
 
-	private static CookieStore cookieStore;
+    private static CookieStore cookieStore;
 
-	static {
-		cookieStore = new BasicCookieStore();
-		// 将CookieStore设置到httpClient中
-		httpClient = HttpClients.custom().setDefaultCookieStore(cookieStore).build();
-	}
+    static {
+        cookieStore = new BasicCookieStore();
+        // 将CookieStore设置到httpClient中
+        httpClient = HttpClients.custom().setDefaultCookieStore(cookieStore).build();
+    }
 
-	public static String getCookie(String name) {
-		List<Cookie> cookies = cookieStore.getCookies();
-		for (Cookie cookie : cookies) {
-			if (cookie.getName().equalsIgnoreCase(name)) {
-				return cookie.getValue();
-			}
-		}
-		return null;
+    private HttpClientUtil() {
+    }
 
-	}
+    public static HttpClientUtil getInstance() {
+        if (instance == null) {
+            synchronized (HttpClientUtil.class) {
+                if (instance == null) {
+                    instance = new HttpClientUtil();
+                }
+            }
+        }
+        return instance;
+    }
 
-	private HttpClientUtil() {
+    public static String getCookie(String name) {
+        List<Cookie> cookies = cookieStore.getCookies();
+        for (Cookie cookie : cookies) {
+            if (cookie.getName().equalsIgnoreCase(name)) {
+                return cookie.getValue();
+            }
+        }
+        return null;
+    }
 
-	}
+    /**
+     * 发起get请求
+     * @param url
+     * @param params
+     * @param header
+     * @param isRedirect
+     * @return
+     */
+    public String doGet(String url, Map<String, String> params, Map<String, String> header, boolean isRedirect) {
+        if (StringUtils.isEmpty(url)) {
+            return null;
+        }
+        try {
+            HttpEntity httpEntity = doGetForEntity(url, params, header, isRedirect);
+            String result = null;
+            if (httpEntity != null) {
+                result = EntityUtils.toString(httpEntity, "utf-8");
+            }
+            /*
+             * 释放资源
+             */
+            EntityUtils.consume(httpEntity);
+            return result;
+        } catch (Exception e) {
+            log.error("url : {} http client request exception:{}", url, e);
+        }
+        return null;
+    }
 
-	/**
-	 * 获取cookies
-	 * 
-	 * @author https://github.com/yaphone
-	 * @date 2017年5月7日 下午8:37:17
-	 * @return
-	 */
-	public static HttpClientUtil getInstance() {
-		if (instance == null) {
-			synchronized (HttpClientUtil.class) {
-				if (instance == null) {
-					instance = new HttpClientUtil();
-				}
-			}
-		}
-		return instance;
-	}
+    /**
+     * 发起get请求
+     * @param url
+     * @param params
+     * @param header
+     * @param isRedirect
+     * @return
+     */
+    public HttpEntity doGetForEntity(String url, Map<String, String> params, Map<String, String> header, boolean isRedirect) {
+        if (StringUtils.isEmpty(url)) {
+            return null;
+        }
+        try {
+            if (params != null && !params.isEmpty()) {
+                List<BasicNameValuePair> pairs = new ArrayList<>(params.size());
+                for (Map.Entry<String, String> entry : params.entrySet()) {
+                    String value = entry.getValue();
+                    if (value != null) {
+                        pairs.add(new BasicNameValuePair(entry.getKey(), value));
+                    }
+                }
+                url += "?" + EntityUtils.toString(new UrlEncodedFormEntity(pairs, "UTF-8"));
+            }
+            final HttpGet httpGet = new HttpGet(url);
+            //设置请求头
+            if (header != null && !header.isEmpty()) {
+                header.forEach(httpGet::setHeader);
+            }
+            if (!isRedirect) {
+                // 禁止重定向
+                httpGet.setConfig(RequestConfig.custom().setRedirectsEnabled(false).build());
+            }
+            httpGet.setHeader("User-Agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_11_6) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/54.0.2840.71 Safari/537.36");
+            CloseableHttpResponse response = httpClient.execute(httpGet);
+            // 返回码校验
+            int statusCode = response.getStatusLine().getStatusCode();
+            if (statusCode != 200) {
+                httpGet.abort();
+                log.error("http请求{}失败, error status code : {}", url, statusCode);
+            }
+            //读取响应结果
+            HttpEntity entity = response.getEntity();
+            return entity;
+        } catch (Exception e) {
+            log.error("url : {} http client request exception:{}", url, e);
+        }
+        return null;
+    }
 
-	/**
-	 * 处理GET请求
-	 * 
-	 * @author https://github.com/yaphone
-	 * @date 2017年4月9日 下午7:06:19
-	 * @param url
-	 * @param params
-	 * @return
-	 */
-	public HttpEntity doGet(String url, List<BasicNameValuePair> params, boolean redirect,
-			Map<String, String> headerMap) {
-		HttpEntity entity = null;
-		HttpGet httpGet = new HttpGet();
+    /**
+     * 发送post请求
+     * @param url
+     * @param requestBody
+     * @return
+     */
+    public String doPost(String url, String requestBody) {
+        if (StringUtils.isEmpty(url)) {
+            return null;
+        }
+        try {
+            HttpPost httpPost = new HttpPost(url);
+            StringEntity stringEntity = new StringEntity(requestBody, "UTF-8");
+            httpPost.setEntity(stringEntity);
+            httpPost.setHeader("Content-type", "application/json; charset=utf-8");
+            httpPost.setHeader("User-Agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_11_6) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/54.0.2840.71 Safari/537.36");
+            CloseableHttpResponse response = httpClient.execute(httpPost);
+            int statusCode = response.getStatusLine().getStatusCode();
+            if (statusCode != 200) {
+                httpPost.abort();
+                log.error("http请求{}失败, error status code : {}", url, statusCode);
+            }
+            HttpEntity entity = response.getEntity();
+            String result = null;
+            if (entity != null) {
+                result = EntityUtils.toString(entity, "utf-8");
+            }
+            EntityUtils.consume(entity);
+            response.close();
+            return result;
+        } catch (Exception e) {
+            log.error("url : {} http client request exception:{}", url, e);
+        }
+        return null;
+    }
 
-		try {
-			if (params != null) {
-				String paramStr = EntityUtils.toString(new UrlEncodedFormEntity(params, Consts.UTF_8));
-				httpGet = new HttpGet(url + "?" + paramStr);
-			} else {
-				httpGet = new HttpGet(url);
-			}
-			if (!redirect) {
-				httpGet.setConfig(RequestConfig.custom().setRedirectsEnabled(false).build()); // 禁止重定向
-			}
-			httpGet.setHeader("User-Agent", USER_AGENT);
-			if (headerMap != null) {
-				Set<Entry<String, String>> entries = headerMap.entrySet();
-				for (Entry<String, String> entry : entries) {
-					httpGet.setHeader(entry.getKey(), entry.getValue());
-				}
-			}
-			CloseableHttpResponse response = httpClient.execute(httpGet);
-			entity = response.getEntity();
-		} catch (ClientProtocolException e) {
-			log.info(e.getMessage());
-		} catch (IOException e) {
-			log.info(e.getMessage());
-		}
+    public static void main(String[] args) {
+//        testDoGet();
+        String result = "window.QRLogin.code = 200; window.QRLogin.uuid = \"AYTiXKTz0g==\";";
+        String uuid = result.substring(result.indexOf("\"") + 1, result.lastIndexOf("\""));
+        System.out.println(uuid);
+    }
 
-		return entity;
-	}
-
-	/**
-	 * 处理POST请求
-	 * 
-	 * @author https://github.com/yaphone
-	 * @date 2017年4月9日 下午7:06:35
-	 * @param url
-	 * @param params
-	 * @return
-	 */
-	public HttpEntity doPost(String url, String paramsStr) {
-		HttpEntity entity = null;
-		HttpPost httpPost = new HttpPost();
-		try {
-			StringEntity params = new StringEntity(paramsStr, Consts.UTF_8);
-			httpPost = new HttpPost(url);
-			httpPost.setEntity(params);
-			httpPost.setHeader("Content-type", "application/json; charset=utf-8");
-			httpPost.setHeader("User-Agent", USER_AGENT);
-			CloseableHttpResponse response = httpClient.execute(httpPost);
-			entity = response.getEntity();
-		} catch (ClientProtocolException e) {
-			log.info(e.getMessage());
-		} catch (IOException e) {
-			log.info(e.getMessage());
-		}
-
-		return entity;
-	}
-
-	/**
-	 * 上传文件到服务器
-	 * 
-	 * @author https://github.com/yaphone
-	 * @date 2017年5月7日 下午9:19:23
-	 * @param url
-	 * @param reqEntity
-	 * @return
-	 */
-	public HttpEntity doPostFile(String url, HttpEntity reqEntity) {
-		HttpEntity entity = null;
-		HttpPost httpPost = new HttpPost(url);
-		httpPost.setHeader("User-Agent", USER_AGENT);
-		httpPost.setEntity(reqEntity);
-		try {
-			CloseableHttpResponse response = httpClient.execute(httpPost);
-			entity = response.getEntity();
-
-		} catch (Exception e) {
-			log.info(e.getMessage());
-		}
-		return entity;
-	}
-
-	public static CloseableHttpClient getHttpClient() {
-		return httpClient;
-	}
-
+    private static void testDoGet() {
+        HttpClientUtil httpClientUtil = HttpClientUtil.getInstance();
+        Map<String, String> params = new HashMap<>();
+        params.put("appid", "wx782c26e4c19acffb");
+        params.put("fun", "new");
+        params.put("lang", "zh_CN");
+        long now = System.currentTimeMillis();
+        params.put("_", String.valueOf(now));
+        String result = httpClientUtil.doGet(UrlConstant.UUID_URL, params, null, true);
+        log.info("result:[{}]", result);
+    }
 }
