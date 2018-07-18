@@ -1,14 +1,13 @@
 package com.pptom.robot.service.impl;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.pptom.robot.core.WeChatManager;
 import com.pptom.robot.service.LoginService;
 import com.pptom.robot.util.HttpClientUtil;
 import com.pptom.robot.util.UrlConstant;
-import com.pptom.robot.util.enums.LoginParamEnum;
-import com.pptom.robot.util.enums.LoginResultEnum;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.http.HttpEntity;
-import org.apache.http.message.BasicNameValuePair;
 import org.apache.http.util.EntityUtils;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
@@ -33,6 +32,8 @@ import java.util.*;
 @Service
 @Slf4j
 public class LoginServiceImpl implements LoginService {
+
+    private final String passTicket = "pass_ticket";
 
     private WeChatManager weChatManager;
 
@@ -103,13 +104,14 @@ public class LoginServiceImpl implements LoginService {
                     String skey = "skey";
                     String wxsid = "wxsid";
                     String wxuin = "wxuin";
-                    String pass_ticket = "pass_ticket";
                     weChatManager.putLoginInfo(skey, doc.getElementsByTagName(skey).item(0).getFirstChild().getNodeValue());
                     weChatManager.putLoginInfo(wxsid, doc.getElementsByTagName(wxsid).item(0).getFirstChild().getNodeValue());
                     weChatManager.putLoginInfo(wxuin, doc.getElementsByTagName(wxuin).item(0).getFirstChild().getNodeValue());
-                    weChatManager.putLoginInfo(pass_ticket, doc.getElementsByTagName(pass_ticket).item(0).getFirstChild().getNodeValue());
+                    weChatManager.putLoginInfo(passTicket, doc.getElementsByTagName(passTicket).item(0).getFirstChild().getNodeValue());
                 }
                 isLogin = true;
+                //标记登录状态
+                weChatManager.setAlive(true);
                 log.info("登录成功!");
             } else if ("201".equals(code)) {
                 log.info("请在手机上确认登录!");
@@ -223,13 +225,82 @@ public class LoginServiceImpl implements LoginService {
     }
 
     @Override
-    public boolean webWxInit() {
-        return false;
+    public boolean initWeChatManager() {
+        weChatManager.setAlive(true);
+        //设置最后活跃时间
+        weChatManager.setLastNormalRetcodeTime(System.currentTimeMillis());
+        // 组装请求URL和参数
+        String url = String.format(UrlConstant.INIT_URL, weChatManager.getFromLoginInfo("url")
+                , String.valueOf(System.currentTimeMillis() / 3158L)
+                , weChatManager.getFromLoginInfo(passTicket));
+        //获取基本参数
+        Map<String, Object> paramMap = weChatManager.getParamMap();
+        //jackson
+        ObjectMapper objectMapper = new ObjectMapper();
+        String requestBody = "";
+        try {
+            requestBody = objectMapper.writeValueAsString(paramMap);
+        } catch (IOException e) {
+            log.warn("can not write json to request body!{}", e.getMessage());
+        }
+        String responseBody = httpClientUtil.doPost(url, requestBody);
+        try {
+            //转成json
+            JsonNode root = objectMapper.readTree(responseBody);
+            //获取用户
+            JsonNode user = root.get("User");
+            //获取同步key
+            JsonNode syncKey = root.get("SyncKey");
+            Integer inviteStartCount =  root.get("InviteStartCount").asInt();
+            weChatManager.putLoginInfo("InviteStartCount", inviteStartCount);
+            weChatManager.putLoginInfo("SyncKey", syncKey);
+            //获取list并遍历
+            StringBuilder sb = new StringBuilder();
+            JsonNode list = syncKey.get("List");
+            if (list.isArray()) {
+                for (JsonNode node : list) {
+                    sb.append(node.get("Key").asText()).append("_").append(node.get("Val").asText()).append("|");
+                }
+            }
+            // 1_661706053|2_661706420|3_661706415|1000_1494151022
+            String synckey = sb.toString().substring(0, sb.toString().length() - 1);
+            weChatManager.putLoginInfo("synckey", synckey);
+            weChatManager.setUserName(user.get("UserName").asText());
+            weChatManager.setNickName(user.get("NickName").asText());
+            weChatManager.setUserSelf(user);
+            // chatset
+            String chatSet = root.get("ChatSet").asText();
+            String[] chatSetArray = chatSet.split(",");
+            for (String cs : chatSetArray) {
+                if (!cs.contains("@@")) {
+                    weChatManager.getGroupIdList().add(cs);
+                }
+            }
+        } catch (IOException e) {
+            e.printStackTrace();
+            return false;
+        }
+        return true;
     }
 
     @Override
     public void wxStatusNotify() {
-
+        // 组装请求URL和参数
+        String url = String.format(UrlConstant.STATUS_NOTIFY_URL, weChatManager.getFromLoginInfo(passTicket));
+        Map<String, Object> paramMap = weChatManager.getParamMap();
+        paramMap.put("Code", "3");
+        paramMap.put("FromUserName", "");
+        paramMap.put("ToUserName", "");
+        paramMap.put("ClientMsgId", System.currentTimeMillis());
+        ObjectMapper objectMapper = new ObjectMapper();
+        String requestBody = "";
+        try {
+            requestBody = objectMapper.writeValueAsString(paramMap);
+        } catch (IOException e) {
+            log.warn("can not write json to request body!{}", e.getMessage());
+        }
+        String responseBody = httpClientUtil.doPost(url, requestBody);
+        log.info(String.format("欢迎回来， %s", weChatManager.getNickName()));
     }
 
     @Override

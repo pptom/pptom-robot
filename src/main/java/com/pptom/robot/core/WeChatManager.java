@@ -2,6 +2,7 @@ package com.pptom.robot.core;
 
 import com.alibaba.fastjson.JSONArray;
 import com.alibaba.fastjson.JSONObject;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.pptom.robot.domain.WeChatMessage;
 import com.pptom.robot.util.HttpClientUtil;
 
@@ -78,7 +79,7 @@ public class WeChatManager {
     /**
      * 登陆账号自身信息
      */
-    private JSONObject userSelf;
+    private JsonNode userSelf;
     /**
      * 好友+群聊+公众号+特殊账号
      */
@@ -126,6 +127,27 @@ public class WeChatManager {
     public void putLoginInfo(String key, Object object) {
         this.loginInfo.put(key, object);
     }
+
+    public Object getFromLoginInfo(String key){
+        return this.loginInfo.get(key);
+    }
+
+    /**
+     * 请求参数
+     */
+    public Map<String, Object> getParamMap() {
+        Map<String, Object> map = new HashMap<>();
+        Map<String, String> baseRequest = new HashMap<>();
+        baseRequest.put("Uin", "wxuin");
+        baseRequest.put("Sid", "wxsid");
+        baseRequest.put("Skey", "skey");
+        baseRequest.put("DeviceID", "pass_ticket");
+        map.put("BaseRequest", baseRequest);
+        return map;
+    }
+
+
+    //==================================================================================================================
 
     public HttpClientUtil getHttpClientUtil() {
         return httpClientUtil;
@@ -223,13 +245,6 @@ public class WeChatManager {
         this.weChatMessageList = weChatMessageList;
     }
 
-    public JSONObject getUserSelf() {
-        return userSelf;
-    }
-
-    public void setUserSelf(JSONObject userSelf) {
-        this.userSelf = userSelf;
-    }
 
     public List<JSONObject> getMemberList() {
         return memberList;
@@ -301,6 +316,17 @@ public class WeChatManager {
 
     public void setUserInfoMap(Map<String, JSONObject> userInfoMap) {
         this.userInfoMap = userInfoMap;
+    }
+
+    //==================================================================================================================
+
+
+    public JsonNode getUserSelf() {
+        return userSelf;
+    }
+
+    public void setUserSelf(JsonNode userSelf) {
+        this.userSelf = userSelf;
     }
 
     public Map<String, Object> getLoginInfo() {

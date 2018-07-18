@@ -23,7 +23,12 @@ public class PptomRobotApplication {
     @Bean
     public CommandLineRunner startWeChat() {
         return (args) -> {
-            loginService.login();
+            boolean login = loginService.login();
+            if (login) {
+                loginService.initWeChatManager();
+                loginService.wxStatusNotify();
+
+            }
         };
     }
 

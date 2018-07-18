@@ -19,7 +19,7 @@ public interface LoginService {
      * web初始化
      * @return
      */
-    boolean webWxInit();
+    boolean initWeChatManager();
 
     /**
      * 微信状态通知
