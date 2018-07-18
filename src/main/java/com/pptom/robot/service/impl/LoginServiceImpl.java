@@ -1,8 +1,13 @@
 package com.pptom.robot.service.impl;
 
+import com.alibaba.fastjson.JSONArray;
+import com.alibaba.fastjson.JSONObject;
+import com.fasterxml.jackson.core.JsonParser;
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.pptom.robot.core.WeChatManager;
+import com.pptom.robot.domain.WeChatMessage;
 import com.pptom.robot.service.LoginService;
 import com.pptom.robot.util.HttpClientUtil;
 import com.pptom.robot.util.UrlConstant;
@@ -154,7 +159,11 @@ public class LoginServiceImpl implements LoginService {
                         value = value + "=" + str[j];
                     }
                 }
-                resultMap.put(key, value.trim().replace("\"", "").replace("'", ""));
+                if (value.startsWith("{") && value.endsWith("}")) {
+                    resultMap.put(key, value.trim());
+                } else {
+                    resultMap.put(key, value.trim().replace("\"", "").replace("'", ""));
+                }
             }
         }
         return resultMap;
@@ -303,9 +312,65 @@ public class LoginServiceImpl implements LoginService {
         log.info(String.format("欢迎回来， %s", weChatManager.getNickName()));
     }
 
+
     @Override
     public void startReceiving() {
+        weChatManager.setAlive(true);
+        Runnable runnable = () ->{
+            log.info("Started Receiving Thread {}", Thread.currentThread().getName());
+            while (weChatManager.isAlive()) {
+                Map<String, String> resultMap = syncCheck();
+                String retcode = resultMap.get("retcode");
+                String selector = resultMap.get("selector");
+                if ("0".equals(retcode)) {
+                    // 最后收到正常报文时间
+                    ObjectMapper objectMapper = new ObjectMapper();
+                    weChatManager.setLastNormalRetcodeTime(System.currentTimeMillis());
+                    JsonNode message = syncWeChatMessage();
+                    if ("2".equals(selector)) {
+                        if (message != null) {
+                            JsonNode messageList = message.get("AddMsgList");
+                            //todo
+                            if (messageList.isArray()) {
+                                for (JsonNode msg : messageList) {
+                                    try {
+                                        String s = objectMapper.writeValueAsString(msg);
+                                        WeChatMessage weChatMessage = objectMapper.readValue(s, WeChatMessage.class);
+                                        weChatManager.getWeChatMessageList().add(weChatMessage);
+                                    } catch (Exception e) {
+                                        e.printStackTrace();
+                                    }
+                                }
+                            }
+                        }
 
+                    } else if (selector.equals("7")) {
+                        syncWeChatMessage();
+                    } else if (selector.equals("4")) {
+                        continue;
+                    } else if (selector.equals("3")) {
+                        continue;
+                    } else if (selector.equals("6")) {
+                        if (message != null) {
+                            JsonNode messageList = message.get("AddMsgList");
+                            //todo produce
+                            JsonNode modContactList = message.get("ModContactList");
+                            if (modContactList.isArray()) {
+                                for (JsonNode mod : modContactList) {
+                                    // 存在主动加好友之后的同步联系人到本地
+                                    weChatManager.getContactList().add(mod);
+                                }
+                            }
+                        }
+                    }
+
+                } else {
+                    log.warn("未知错误,retcode:{}", retcode);
+                    break;
+                }
+            }
+        };
+        new Thread(runnable).start();
     }
 
     @Override
@@ -317,6 +382,105 @@ public class LoginServiceImpl implements LoginService {
     public void WebWxBatchGetContact() {
 
     }
+
+
+    private Map<String, String> syncCheck() {
+        Map<String, String> resultMap = new HashMap<>();
+        String url = weChatManager.getFromLoginInfo("syncUrl") + UrlConstant.SYNC_CHECK_URL;
+        Map<String, String> params = new HashMap<>();
+        params.put("uin", ((String) weChatManager.getFromLoginInfo("wxuin")));
+        params.put("sid", ((String) weChatManager.getFromLoginInfo("wxsid")));
+        params.put("skey", ((String) weChatManager.getFromLoginInfo("skey")));
+        params.put("deviceid", ((String) weChatManager.getFromLoginInfo("pass_ticket")));
+        params.put("r", String.valueOf(System.currentTimeMillis()));
+        params.put("synckey", (String) weChatManager.getFromLoginInfo("synckey"));
+        params.put("_", String.valueOf(System.currentTimeMillis()));
+        sleep(100);
+        HttpEntity entity = httpClientUtil.doGetForEntity(url, params, null, true);
+        if (entity == null) {
+            resultMap.put("retcode", "9999");
+            resultMap.put("selector", "9999");
+            return resultMap;
+        }
+        try {
+            String text = EntityUtils.toString(entity);
+            Map<String, String> map = processResult(text);
+            String s = map.get("window.synccheck");
+            if (!StringUtils.isEmpty(s)) {
+                ObjectMapper objectMapper = new ObjectMapper();
+                objectMapper.configure(JsonParser.Feature.ALLOW_UNQUOTED_FIELD_NAMES, true);
+                JsonNode jsonNode = objectMapper.readTree(s);
+                resultMap.put("retcode", jsonNode.get("retcode").asText());
+                resultMap.put("selector", jsonNode.get("selector").asText());
+            }
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+        return resultMap;
+    }
+
+
+    /**
+     * 同步消息 sync the WeChat messages
+     * @return
+     */
+    private JsonNode syncWeChatMessage() {
+        JsonNode jsonNode = null;
+        String preUrl = (String) weChatManager.getFromLoginInfo("url");
+        String wxsid = (String) weChatManager.getFromLoginInfo("wxsid");
+        String skey = (String) weChatManager.getFromLoginInfo("skey");
+        String pass_ticket = (String) weChatManager.getFromLoginInfo("pass_ticket");
+        String url = String.format(UrlConstant.WEB_WX_SYNC_URL, preUrl, wxsid, skey, pass_ticket);
+        //参数
+        Map<String, Object> paramMap = weChatManager.getParamMap();
+        paramMap.put("SyncKey", weChatManager.getFromLoginInfo("SyncKey"));
+        long rr = -System.currentTimeMillis() / 1000;
+        paramMap.put("rr", rr);
+        ObjectMapper objectMapper = new ObjectMapper();
+        String requestBody = "";
+        try {
+            requestBody = objectMapper.writeValueAsString(paramMap);
+        } catch (IOException e) {
+            log.warn("can not write json to request body!{}", e.getMessage());
+        }
+        String responseBody = httpClientUtil.doPost(url, requestBody);
+        try {
+            JsonNode root = objectMapper.readTree(responseBody);
+            int ret = root.get("BaseResponse").get("Ret").asInt();
+            if (ret == 0) {
+                jsonNode = root;
+                JsonNode syncCheckKey = jsonNode.get("SyncCheckKey");
+                weChatManager.putLoginInfo("SyncKey", syncCheckKey);
+                JsonNode list = jsonNode.get("SyncKey").get("List");
+                StringBuilder sb = new StringBuilder();
+                if (list.isArray()) {
+                    for (JsonNode node : list) {
+                        sb.append(node.get("Key").asText()).append("_").append(node.get("Val").asText()).append("|");
+                    }
+                }
+                String synckey = sb.toString();
+                weChatManager.putLoginInfo("synckey", synckey.substring(0, synckey.length() - 1));
+            }
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+
+        return jsonNode;
+    }
+
+    /**
+     * 毫秒为单位
+     *
+     * @param time
+     */
+    public void sleep(long time) {
+        try {
+            Thread.sleep(time);
+        } catch (InterruptedException e) {
+            e.printStackTrace();
+        }
+    }
+
 
     private Map<String, List<String>> getPossibleUrlMap() {
         Map<String, List<String>> possibleUrlMap = new HashMap<>();

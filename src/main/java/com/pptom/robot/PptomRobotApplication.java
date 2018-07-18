@@ -27,21 +27,9 @@ public class PptomRobotApplication {
             if (login) {
                 loginService.initWeChatManager();
                 loginService.wxStatusNotify();
+                loginService.startReceiving();
 
             }
         };
-    }
-
-    /**
-     * 毫秒为单位
-     *
-     * @param time
-     */
-    public void sleep(long time) {
-        try {
-            Thread.sleep(time);
-        } catch (InterruptedException e) {
-            e.printStackTrace();
-        }
     }
 }

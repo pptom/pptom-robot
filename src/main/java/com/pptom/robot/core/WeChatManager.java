@@ -87,7 +87,7 @@ public class WeChatManager {
     /**
      * 好友
      */
-    private List<JSONObject> contactList = new ArrayList<>();
+    private List<JsonNode> contactList = new ArrayList<>();
     /**
      * 群
      */
@@ -254,11 +254,11 @@ public class WeChatManager {
         this.memberList = memberList;
     }
 
-    public List<JSONObject> getContactList() {
+    public List<JsonNode> getContactList() {
         return contactList;
     }
 
-    public void setContactList(List<JSONObject> contactList) {
+    public void setContactList(List<JsonNode> contactList) {
         this.contactList = contactList;
     }
 
