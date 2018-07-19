@@ -1,9 +1,6 @@
 package com.pptom.robot.service.impl;
 
-import com.alibaba.fastjson.JSONArray;
-import com.alibaba.fastjson.JSONObject;
 import com.fasterxml.jackson.core.JsonParser;
-import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.MapperFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -337,13 +334,12 @@ public class LoginServiceImpl implements LoginService {
                             messageList = MessageProcessor.produceMsg(messageList);
                             if (messageList.isArray()) {
                                 for (JsonNode msg : messageList) {
-                                    log.debug("msg:{}", msg);
                                     try {
                                         String s = objectMapper.writeValueAsString(msg);
                                         WeChatMessage weChatMessage = objectMapper.readValue(s, WeChatMessage.class);
                                         log.info("收到消息一条，来自:[{}], FromUserName:{}",
                                                 weChatMessage.getRecommendInfo().getNickName(), weChatMessage.getFromUserName());
-                                        weChatManager.getWeChatMessageList().add(weChatMessage);
+                                        weChatManager.addMessageToQueue(weChatMessage);
                                     } catch (Exception e) {
                                         e.printStackTrace();
                                     }

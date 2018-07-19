@@ -8,8 +8,6 @@ import com.pptom.robot.util.MessageCodeConstant;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.util.StringUtils;
 
-import java.util.HashMap;
-import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -81,6 +79,14 @@ public class MessageProcessor {
             }
         }
         return arrayNode;
+    }
+
+    /**
+     * 消息处理
+     * @param weChatMessageHandler
+     */
+    public static void handleMessage(WeChatMessageHandler weChatMessageHandler) {
+
     }
 
     /**

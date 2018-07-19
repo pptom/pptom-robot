@@ -5,11 +5,13 @@ import com.alibaba.fastjson.JSONObject;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.pptom.robot.domain.WeChatMessage;
 import com.pptom.robot.util.HttpClientUtil;
+import lombok.extern.slf4j.Slf4j;
 
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.*;
 
 /**
  * @author tom.tang
@@ -18,6 +20,7 @@ import java.util.Map;
  * @description
  * @since 2018/7/18
  */
+@Slf4j
 public class WeChatManager {
     /**
      * 创建一个WeChatManager对象
@@ -70,11 +73,6 @@ public class WeChatManager {
      * 最后一次收到正常retcode的时间，秒为单位
      */
     private long lastNormalRetcodeTime;
-
-    /**
-     * 消息列表
-     */
-    private List<WeChatMessage> weChatMessageList = new ArrayList<>();
 
     /**
      * 登陆账号自身信息
@@ -170,15 +168,46 @@ public class WeChatManager {
         return false;
     }
 
+    //=================================================消息处理任务=====================================================
+
+    /**
+     * 定义一个线程安全的消息队列
+     */
+    private ConcurrentLinkedQueue<WeChatMessage> weChatMessageQueue = new ConcurrentLinkedQueue<>();
+
+    /**
+     * 定时周期执行指定的任务.
+     */
+    private ScheduledExecutorService scheduler;
+
+    public void addMessageToQueue(WeChatMessage weChatMessage) {
+        this.weChatMessageQueue.add(weChatMessage);
+    }
+
+    /**
+     * 初始化线程池处理收到的消息
+     */
+    public void initMessageHandleExecutor(WeChatMessageHandler weChatMessageHandler) {
+        int cpuCoreNumber = Runtime.getRuntime().availableProcessors();
+        int cpuCoreNumber2 = cpuCoreNumber / 4;
+        if (cpuCoreNumber2 == 0) {
+            cpuCoreNumber2 = 1;
+        }
+        scheduler = Executors.newScheduledThreadPool(cpuCoreNumber2);
+        Runnable task = () ->{
+            final WeChatMessage weChatMessage = weChatMessageQueue.poll();
+            if (weChatMessage != null) {
+                log.info("开始处理新消息, 来自: {}", weChatMessage.getFromUserName());
+                //todo 判断类型调用weChatMessageHandler处理消息
+            }
+        };
+        scheduler.scheduleAtFixedRate(task, 100L, 100L, TimeUnit.MILLISECONDS);
+    }
 
     //==================================================================================================================
 
     public HttpClientUtil getHttpClientUtil() {
         return httpClientUtil;
-    }
-
-    public void setHttpClientUtil(HttpClientUtil httpClientUtil) {
-        this.httpClientUtil = httpClientUtil;
     }
 
     public boolean isAlive() {
@@ -187,26 +216,6 @@ public class WeChatManager {
 
     public void setAlive(boolean alive) {
         isAlive = alive;
-    }
-
-    public int getMemberCount() {
-        return memberCount;
-    }
-
-    public void setMemberCount(int memberCount) {
-        this.memberCount = memberCount;
-    }
-
-    public String getIndexUrl() {
-        return indexUrl;
-    }
-
-    public void setIndexUrl(String indexUrl) {
-        this.indexUrl = indexUrl;
-    }
-
-    public String getUserName() {
-        return userName;
     }
 
     public void setUserName(String userName) {
@@ -229,135 +238,19 @@ public class WeChatManager {
         this.uuid = uuid;
     }
 
-    public boolean isUseHotReload() {
-        return useHotReload;
-    }
-
-    public void setUseHotReload(boolean useHotReload) {
-        this.useHotReload = useHotReload;
-    }
-
-    public String getHotReloadDir() {
-        return hotReloadDir;
-    }
-
-    public void setHotReloadDir(String hotReloadDir) {
-        this.hotReloadDir = hotReloadDir;
-    }
-
-    public int getReceivingRetryCount() {
-        return receivingRetryCount;
-    }
-
-    public void setReceivingRetryCount(int receivingRetryCount) {
-        this.receivingRetryCount = receivingRetryCount;
-    }
-
-    public long getLastNormalRetcodeTime() {
-        return lastNormalRetcodeTime;
-    }
-
     public void setLastNormalRetcodeTime(long lastNormalRetcodeTime) {
         this.lastNormalRetcodeTime = lastNormalRetcodeTime;
-    }
-
-    public List<WeChatMessage> getWeChatMessageList() {
-        return weChatMessageList;
-    }
-
-    public void setWeChatMessageList(List<WeChatMessage> weChatMessageList) {
-        this.weChatMessageList = weChatMessageList;
-    }
-
-
-    public List<JSONObject> getMemberList() {
-        return memberList;
-    }
-
-    public void setMemberList(List<JSONObject> memberList) {
-        this.memberList = memberList;
     }
 
     public List<JsonNode> getContactList() {
         return contactList;
     }
 
-    public void setContactList(List<JsonNode> contactList) {
-        this.contactList = contactList;
-    }
-
-    public List<JSONObject> getGroupList() {
-        return groupList;
-    }
-
-    public void setGroupList(List<JSONObject> groupList) {
-        this.groupList = groupList;
-    }
-
-    public Map<String, JSONArray> getGroupMemeberMap() {
-        return groupMemeberMap;
-    }
-
-    public void setGroupMemeberMap(Map<String, JSONArray> groupMemeberMap) {
-        this.groupMemeberMap = groupMemeberMap;
-    }
-
-    public List<JSONObject> getPublicUsersList() {
-        return publicUsersList;
-    }
-
-    public void setPublicUsersList(List<JSONObject> publicUsersList) {
-        this.publicUsersList = publicUsersList;
-    }
-
-    public List<JSONObject> getSpecialUsersList() {
-        return specialUsersList;
-    }
-
-    public void setSpecialUsersList(List<JSONObject> specialUsersList) {
-        this.specialUsersList = specialUsersList;
-    }
-
-//    public List<String> getGroupIdList() {
-//        return groupIdList;
-//    }
-//
-//    public void setGroupIdList(List<String> groupIdList) {
-//        this.groupIdList = groupIdList;
-//    }
-
-    public List<String> getGroupNickNameList() {
-        return groupNickNameList;
-    }
-
-    public void setGroupNickNameList(List<String> groupNickNameList) {
-        this.groupNickNameList = groupNickNameList;
-    }
-
-    public Map<String, JSONObject> getUserInfoMap() {
-        return userInfoMap;
-    }
-
-    public void setUserInfoMap(Map<String, JSONObject> userInfoMap) {
-        this.userInfoMap = userInfoMap;
-    }
-
     //==================================================================================================================
 
-
-    public JsonNode getUserSelf() {
-        return userSelf;
-    }
 
     public void setUserSelf(JsonNode userSelf) {
         this.userSelf = userSelf;
     }
 
-    public Map<String, Object> getLoginInfo() {
-        return loginInfo;
-    }
-
-    public void setLoginInfo(Map<String, Object> loginInfo) {
-        this.loginInfo = loginInfo;
-    }
 }

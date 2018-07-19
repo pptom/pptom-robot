@@ -1,4 +1,4 @@
-package com.pptom.robot.api;
+package com.pptom.robot.core;
 
 import com.pptom.robot.domain.ResultBean;
 import com.pptom.robot.domain.WeChatMessage;
