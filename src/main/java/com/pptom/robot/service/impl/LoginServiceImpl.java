@@ -372,8 +372,9 @@ public class LoginServiceImpl implements LoginService {
                 } else {
                     log.warn("未知错误,retcode:{}", retcode);
                     //todo 重试
-                    break;
+                    sleep(2000);
                 }
+                sleep(100);
             }
         };
         new Thread(runnable).start();

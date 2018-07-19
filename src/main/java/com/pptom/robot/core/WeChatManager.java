@@ -3,8 +3,10 @@ package com.pptom.robot.core;
 import com.alibaba.fastjson.JSONArray;
 import com.alibaba.fastjson.JSONObject;
 import com.fasterxml.jackson.databind.JsonNode;
+import com.pptom.robot.domain.ResultBean;
 import com.pptom.robot.domain.WeChatMessage;
 import com.pptom.robot.util.HttpClientUtil;
+import com.pptom.robot.util.MessageCodeConstant;
 import lombok.extern.slf4j.Slf4j;
 
 import java.util.ArrayList;
@@ -194,14 +196,37 @@ public class WeChatManager {
             cpuCoreNumber2 = 1;
         }
         scheduler = Executors.newScheduledThreadPool(cpuCoreNumber2);
+        log.info("消息监控初始化完成...");
         Runnable task = () ->{
+//            log.info("监控队列消息中...");
             final WeChatMessage weChatMessage = weChatMessageQueue.poll();
             if (weChatMessage != null) {
-                log.info("开始处理新消息, 来自: {}", weChatMessage.getFromUserName());
-                //todo 判断类型调用weChatMessageHandler处理消息
+                log.info("开始处理新消息, 来自: {}, 内容:{}", weChatMessage.getFromUserName(), weChatMessage.getText());
+                // 判断类型调用weChatMessageHandler回复消息
+                Integer type = weChatMessage.getType();
+                ResultBean resultBean = new ResultBean();
+                if (MessageCodeConstant.TEXT.equals(type)) {
+                    resultBean = weChatMessageHandler.handleText(weChatMessage);
+                } else if (MessageCodeConstant.IMAGE.equals(type) || MessageCodeConstant.EMOTICON.equals(type)) {
+                    resultBean = weChatMessageHandler.handleImage(weChatMessage);
+                } else if (MessageCodeConstant.VOICE.equals(type)) {
+                    resultBean = weChatMessageHandler.handleVoice(weChatMessage);
+                } else if (MessageCodeConstant.VERIFYMSG.equals(type)) {
+                    resultBean = weChatMessageHandler.handleAddFriend(weChatMessage);
+                } else if (MessageCodeConstant.SHARECARD.equals(type)) {
+                    resultBean = weChatMessageHandler.handleBusinessCard(weChatMessage);
+                } else if (MessageCodeConstant.VIDEO.equals(type) || MessageCodeConstant.MICROVIDEO.equals(type)) {
+                    resultBean = weChatMessageHandler.handleVideo(weChatMessage);
+                } else if (MessageCodeConstant.MEDIA.equals(type)) {
+                    resultBean = weChatMessageHandler.handleFile(weChatMessage);
+                } else if (MessageCodeConstant.SYS.equals(type)) {
+                    resultBean = weChatMessageHandler.handleSystem(weChatMessage);
+                }
+                //回复信息
+                MessageProcessor.sendMessage(resultBean, weChatMessage);
             }
         };
-        scheduler.scheduleAtFixedRate(task, 100L, 100L, TimeUnit.MILLISECONDS);
+        scheduler.scheduleAtFixedRate(task, 5000L, 1000L, TimeUnit.MILLISECONDS);
     }
 
     //==================================================================================================================
@@ -220,6 +245,10 @@ public class WeChatManager {
 
     public void setUserName(String userName) {
         this.userName = userName;
+    }
+
+    public String getUserName() {
+        return userName;
     }
 
     public String getNickName() {

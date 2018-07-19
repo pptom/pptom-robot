@@ -1,13 +1,20 @@
 package com.pptom.robot.core;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import com.pptom.robot.domain.ResultBean;
+import com.pptom.robot.domain.WeChatMessage;
+import com.pptom.robot.util.HttpClientUtil;
 import com.pptom.robot.util.MessageCodeConstant;
+import com.pptom.robot.util.UrlConstant;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.util.StringUtils;
 
+import java.util.HashMap;
+import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -20,7 +27,10 @@ import java.util.regex.Pattern;
  */
 @Slf4j
 public class MessageProcessor {
+
     private static WeChatManager weChatManager = WeChatManager.getInstance();
+
+    private static HttpClientUtil httpClientUtil = weChatManager.getHttpClientUtil();
 
     public static JsonNode produceMsg(JsonNode messageList) {
         ObjectMapper objectMapper = new ObjectMapper();
@@ -82,11 +92,57 @@ public class MessageProcessor {
     }
 
     /**
-     * 消息处理
-     * @param weChatMessageHandler
+     * 回复信息
+     * @param resultBean
+     * @param weChatMessage
      */
-    public static void handleMessage(WeChatMessageHandler weChatMessageHandler) {
+    public static void sendMessage(ResultBean resultBean, WeChatMessage weChatMessage) {
+        String replyContent = resultBean.getReplyContent();
+        if (resultBean.isReply() && !StringUtils.isEmpty(replyContent)) {
+            String fromUserName = weChatMessage.getFromUserName();
+            sleep(2000);
+            sendMessage(1, replyContent, fromUserName);
+        }
+    }
 
+    /**
+     * 毫秒为单位
+     *
+     * @param time
+     */
+    public static void sleep(long time) {
+        try {
+            Thread.sleep(time);
+        } catch (InterruptedException e) {
+            e.printStackTrace();
+        }
+    }
+
+
+    public static void sendMessage(int msgType, String content, String toUserName) {
+        String userName = weChatManager.getUserName();
+        if (toUserName != null && !toUserName.equals(userName)) {
+            String url = String.format(UrlConstant.WEB_WX_SEND_MSG, weChatManager.getFromLoginInfo("url"));
+            Map<String, Object> messageMap = new HashMap<>();
+            messageMap.put("Type", msgType);
+            messageMap.put("Content", content);
+            messageMap.put("FromUserName", userName);
+            messageMap.put("ToUserName", toUserName == null ? userName : toUserName);
+            messageMap.put("LocalID", System.currentTimeMillis() * 10);
+            messageMap.put("ClientMsgId", System.currentTimeMillis() * 10);
+            Map<String, Object> paramMap = weChatManager.getParamMap();
+            paramMap.put("Msg", messageMap);
+            paramMap.put("Scene", 0);
+            ObjectMapper objectMapper = new ObjectMapper();
+            try {
+                String requestBody = objectMapper.writeValueAsString(paramMap);
+                String result = httpClientUtil.doPost(url, requestBody);
+                log.info("发送信息给:[{}], 内容:[{}]", toUserName, content);
+                log.info("发送信息结果:[{}]", result);
+            } catch (JsonProcessingException e) {
+                e.printStackTrace();
+            }
+        }
     }
 
     /**

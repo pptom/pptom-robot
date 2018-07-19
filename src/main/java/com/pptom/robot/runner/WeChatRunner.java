@@ -1,7 +1,7 @@
 package com.pptom.robot.runner;
 
 import com.pptom.robot.core.WeChatManager;
-import com.pptom.robot.core.WeChatMessageHandlerImpl;
+import com.pptom.robot.custom.TulingHandler;
 import com.pptom.robot.service.LoginService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.CommandLineRunner;
@@ -28,7 +28,9 @@ public class WeChatRunner implements CommandLineRunner {
             loginService.initWeChatManager();
             loginService.wxStatusNotify();
             loginService.startReceiving();
-            weChatManager.initMessageHandleExecutor(new WeChatMessageHandlerImpl());
+            //图灵机器人
+            TulingHandler weChatMessageHandler = new TulingHandler();
+            weChatManager.initMessageHandleExecutor(weChatMessageHandler);
         }
     }
 }
