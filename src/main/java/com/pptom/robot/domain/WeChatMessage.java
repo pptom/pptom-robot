@@ -1,5 +1,6 @@
 package com.pptom.robot.domain;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import lombok.Getter;
 import lombok.Setter;
 
@@ -14,6 +15,7 @@ import java.io.Serializable;
  */
 @Getter
 @Setter
+@JsonIgnoreProperties(ignoreUnknown = true)
 public class WeChatMessage implements Serializable {
     private static final long serialVersionUID = -155168682084829519L;
     private int subMsgType;
@@ -29,7 +31,7 @@ public class WeChatMessage implements Serializable {
     private int status;
     private String Ticket;
     /** 推荐消息报文 **/
-//    private RecommendInfo recommendInfo;
+    private RecommendInfo recommendInfo;
     private long createTime;
     private String newMsgId;
     /** 文本消息内容 **/
@@ -42,7 +44,7 @@ public class WeChatMessage implements Serializable {
     private int statusNotifyCode;
 //    private AppInfo appInfo;
     private int appMsgType;
-    private String Type;
+    private int type;
     private int playLength;
     private String mediaId;
     private String content;

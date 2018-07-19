@@ -124,10 +124,20 @@ public class WeChatManager {
     private Map<String, Object> loginInfo = new HashMap<String, Object>();
 
 
+    /**
+     * 存放登录信息
+     * @param key
+     * @param object
+     */
     public void putLoginInfo(String key, Object object) {
         this.loginInfo.put(key, object);
     }
 
+    /**
+     * 根据key取出登录信息
+     * @param key
+     * @return
+     */
     public Object getFromLoginInfo(String key){
         return this.loginInfo.get(key);
     }
@@ -144,6 +154,20 @@ public class WeChatManager {
         baseRequest.put("DeviceID", "pass_ticket");
         map.put("BaseRequest", baseRequest);
         return map;
+    }
+
+    /**
+     * 添加群组id到list中
+     * @param groupId
+     * @return true 为不存在且添加到list，false为已存在且不操作
+     */
+    public boolean addGroupIdList(String groupId) {
+        //如果不存在，则添加进去
+        if (!this.groupIdList.contains(groupId)) {
+            this.groupIdList.add(groupId);
+            return true;
+        }
+        return false;
     }
 
 
@@ -294,13 +318,13 @@ public class WeChatManager {
         this.specialUsersList = specialUsersList;
     }
 
-    public List<String> getGroupIdList() {
-        return groupIdList;
-    }
-
-    public void setGroupIdList(List<String> groupIdList) {
-        this.groupIdList = groupIdList;
-    }
+//    public List<String> getGroupIdList() {
+//        return groupIdList;
+//    }
+//
+//    public void setGroupIdList(List<String> groupIdList) {
+//        this.groupIdList = groupIdList;
+//    }
 
     public List<String> getGroupNickNameList() {
         return groupNickNameList;

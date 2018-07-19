@@ -5,7 +5,9 @@ import com.alibaba.fastjson.JSONObject;
 import com.fasterxml.jackson.core.JsonParser;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.MapperFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.pptom.robot.core.MessageProcessor;
 import com.pptom.robot.core.WeChatManager;
 import com.pptom.robot.domain.WeChatMessage;
 import com.pptom.robot.service.LoginService;
@@ -282,7 +284,7 @@ public class LoginServiceImpl implements LoginService {
             String[] chatSetArray = chatSet.split(",");
             for (String cs : chatSetArray) {
                 if (!cs.contains("@@")) {
-                    weChatManager.getGroupIdList().add(cs);
+                    weChatManager.addGroupIdList(cs);
                 }
             }
         } catch (IOException e) {
@@ -325,17 +327,22 @@ public class LoginServiceImpl implements LoginService {
                 if ("0".equals(retcode)) {
                     // 最后收到正常报文时间
                     ObjectMapper objectMapper = new ObjectMapper();
+                    objectMapper.configure(MapperFeature.ACCEPT_CASE_INSENSITIVE_PROPERTIES, true);
                     weChatManager.setLastNormalRetcodeTime(System.currentTimeMillis());
-                    JsonNode message = syncWeChatMessage();
+                    JsonNode reponseJson = syncWeChatMessage();
                     if ("2".equals(selector)) {
-                        if (message != null) {
-                            JsonNode messageList = message.get("AddMsgList");
-                            //todo
+                        if (reponseJson != null) {
+                            JsonNode messageList = reponseJson.get("AddMsgList");
+                            //处理后重新赋值
+                            messageList = MessageProcessor.produceMsg(messageList);
                             if (messageList.isArray()) {
                                 for (JsonNode msg : messageList) {
+                                    log.debug("msg:{}", msg);
                                     try {
                                         String s = objectMapper.writeValueAsString(msg);
                                         WeChatMessage weChatMessage = objectMapper.readValue(s, WeChatMessage.class);
+                                        log.info("收到消息一条，来自:[{}], FromUserName:{}",
+                                                weChatMessage.getRecommendInfo().getNickName(), weChatMessage.getFromUserName());
                                         weChatManager.getWeChatMessageList().add(weChatMessage);
                                     } catch (Exception e) {
                                         e.printStackTrace();
@@ -351,10 +358,10 @@ public class LoginServiceImpl implements LoginService {
                     } else if (selector.equals("3")) {
                         continue;
                     } else if (selector.equals("6")) {
-                        if (message != null) {
-                            JsonNode messageList = message.get("AddMsgList");
-                            //todo produce
-                            JsonNode modContactList = message.get("ModContactList");
+                        if (reponseJson != null) {
+                            JsonNode messageList = reponseJson.get("AddMsgList");
+                            messageList = MessageProcessor.produceMsg(messageList);
+                            JsonNode modContactList = reponseJson.get("ModContactList");
                             if (modContactList.isArray()) {
                                 for (JsonNode mod : modContactList) {
                                     // 存在主动加好友之后的同步联系人到本地
@@ -362,10 +369,13 @@ public class LoginServiceImpl implements LoginService {
                                 }
                             }
                         }
+                    } else {
+                        syncWeChatMessage();
                     }
 
                 } else {
                     log.warn("未知错误,retcode:{}", retcode);
+                    //todo 重试
                     break;
                 }
             }
